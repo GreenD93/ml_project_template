@@ -1,0 +1,13 @@
+logging:
+  log_file: "logs/pipeline.log"
+  level: "INFO"
+
+paths:
+  project_dir: "/Users/databiz/workspace/mab"  # 프로젝트 디렉토리
+  config_files:
+    - "configs/a.yaml"
+    - "configs/b.yaml"
+
+dag:
+  - step_a
+  - step_b
