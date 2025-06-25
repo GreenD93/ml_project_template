@@ -1,9 +1,6 @@
-import os
 from pipeline.step_runner import StepRunner
 from pipeline.logger import setup_logger
-from typing import List
-from concurrent.futures import ThreadPoolExecutor
-from config_loader import ConfigLoader
+from pipeline.config_loader import ConfigLoader
 
 class PipelineBuilder:
     def __init__(self, config_file: str, logger=None):
@@ -18,6 +15,9 @@ class PipelineBuilder:
         self.steps = []
         self.failed_steps = []
 
+        # DAG 정의를 읽어들여 실행 순서 정리
+        self.dag = self.config_loader.config_data.get("dag", [])
+
     def add_step(self, name: str, script_path: str, config_path: str = None):
         # config_path가 없으면 기본 config 파일을 사용합니다.
         config_path = config_path or self.config_files[0]
@@ -25,16 +25,13 @@ class PipelineBuilder:
 
     def run_all(self):
         self.logger.info("Pipeline execution started.")
-
-        # 병렬 실행을 위해 ThreadPoolExecutor 사용
-        with ThreadPoolExecutor(max_workers=len(self.steps)) as executor:
-            futures = {executor.submit(step.run, "subprocess"): step.name for step in self.steps}
-            for future in futures:
-                try:
-                    future.result()  # 예외 발생 시 여기서 처리
-                except Exception as e:
-                    self.logger.error(f"[{futures[future]}] Error: {e}")
-                    self.failed_steps.append(futures[future])
+        
+        # DAG에 정의된 순서대로 실행
+        for step_name in self.dag:
+            step = next((s for s in self.steps if s.name == step_name), None)
+            if step:
+                if not step.run("subprocess"):
+                    self.failed_steps.append(step.name)
 
         if self.failed_steps:
             self.logger.error("\n❌ Some steps failed:")

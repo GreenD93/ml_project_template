@@ -1,2 +1,0 @@
-# ml_project_template
-ml_project_template

@@ -1,0 +1,18 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Dependency directories
+__pycache__/
+build/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+temp/
+
+# logs
+logs/

@@ -3,7 +3,6 @@ import os
 import time
 from pipeline.logger import setup_logger
 from typing import Literal
-import multiprocessing
 
 class StepRunner:
     def __init__(self, name: str, script_path: str, config_path: str, log_file: str = None, logger=None, project_dir: str = None, retries: int = 3):
