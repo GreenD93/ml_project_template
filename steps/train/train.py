@@ -28,7 +28,11 @@ if __name__ == "__main__":
     log_level = config_loader.get_log_level()  # ✅ config.yaml과 연동
 
     logger = setup_logger(logger_name, log_file=log_file, level=log_level)
-    logger.info("Running step 'train' with config: %s", args.config_file)
 
+    # ✅ 실제 파라미터 출력
+    train_config = config_loader.config_data.get("config", {})
+    logger.info(f"Training config loaded: {train_config}")
+    logger.info(f"[INFO] Training config: {json.dumps(train_config, indent=2)}")
+
+    # 실제 로직 실행
     print(json.dumps({"success": True}))
-    # step 로직 here...
