@@ -1,13 +1,15 @@
 logging:
-  log_file: "logs/pipeline.log"
-  level: "INFO"
+  log_file: logs/pipeline.log
+  level: INFO
 
 paths:
-  project_dir: "/Users/databiz/workspace/mab"  # 프로젝트 디렉토리
-  config_files:
-    - "configs/a.yaml"
-    - "configs/b.yaml"
+  project_dir: /Users/databiz/workspace/ml_project_template
 
 dag:
-  - step_a
-  - step_b
+  train:
+    script: steps/train/train.py
+    config: configs/train.yaml
+
+  inference:
+    script: steps/inference/inference.py
+    config: configs/inference.yaml

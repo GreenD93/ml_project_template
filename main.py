@@ -1,39 +1,29 @@
-from pipeline.pipeline_builder import PipelineBuilder
+# main.py
+import argparse
+import sys
 from pipeline.config_loader import ConfigLoader
+from pipeline.pipeline_builder import PipelineBuilder
 from pipeline.logger import setup_logger
 
-import argparse
-
-config_file = "configs/config.yaml"
-
 def parse_args():
-    parser = argparse.ArgumentParser(description="Configuration")
-    parser.add_argument('--config_file', 
-                        type=str, 
-                        help='Path to config file',
-                        default='configs/config.yaml',
-                        required=True)
-    
+    parser = argparse.ArgumentParser(description="ML Workflow")
+    parser.add_argument('--config_file', type=str, required=True, default='configs/config.yaml')
+    parser.add_argument('--step', type=str, help='Run only specific step')
     return parser.parse_args()
 
 if __name__ == "__main__":
-
-    # argparse로 인자 받기
     args = parse_args()
 
-    # config_file을 여전히 config_loader에서 읽어옴
     config_loader = ConfigLoader(args.config_file)
+    logger = setup_logger("main", log_file=config_loader.get_log_file(), level=config_loader.get_log_level())
 
-    # 로거 설정
-    logger = setup_logger("main", log_file=config_loader.get_log_file())
-    logger.info("Running ML process with config: %s", args.config_file)
+    builder = PipelineBuilder(config_loader)
 
-    # PipelineBuilder 생성
-    builder = PipelineBuilder(config_file)
-
-    # config.yaml에 정의된 절대 경로로 변환된 각 step config 파일을 넘겨줌
-    builder.add_step("step_a", "steps/a.py", builder.config_files[0])  # a.yaml 경로
-    builder.add_step("step_b", "steps/b.py", builder.config_files[1])  # b.yaml 경로
-
-    # 전체 파이프라인 실행
-    builder.run_all()
+    if args.step:
+        if args.step not in builder.get_step_names():
+            logger.error(f"❌ Step '{args.step}' not defined in DAG.")
+            sys.exit(1)
+        logger.info(f"Running only step: {args.step}")
+        builder.run_step(args.step)
+    else:
+        builder.run_all()
