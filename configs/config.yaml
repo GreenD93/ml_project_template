@@ -6,10 +6,16 @@ paths:
   project_dir: /Users/databiz/workspace/ml_project_template
 
 dag:
+  preprocess:
+    script: steps/preprocess/preprocess.py
+    config: configs/preprocess.yaml
+
   train:
     script: steps/train/train.py
     config: configs/train.yaml
+    depends_on: [preprocess]
 
   inference:
     script: steps/inference/inference.py
     config: configs/inference.yaml
+    depends_on: []

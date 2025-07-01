@@ -9,6 +9,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="ML Workflow")
     parser.add_argument('--config_file', type=str, required=True, default='configs/config.yaml')
     parser.add_argument('--step', type=str, help='Run only specific step')
+    parser.add_argument('--parallel', action='store_true', default=True)
+
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -25,5 +27,8 @@ if __name__ == "__main__":
             sys.exit(1)
         logger.info(f"Running only step: {args.step}")
         builder.run_step(args.step)
+
+    if args.parallel:
+        builder.run_all_parallel(max_workers=4)
     else:
         builder.run_all()

@@ -1,9 +1,9 @@
-# steps/inference/inference.py
+# steps/train/train.py
 
 import argparse
 import os
 from pipeline.config_loader import ConfigLoader
-from pipeline.logger import setup_logger
+from pipeline.logger import setup_logger  # ✅ 변경됨
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Step: inference")
@@ -14,9 +14,11 @@ if __name__ == "__main__":
     args = parse_args()
     config_loader = ConfigLoader(args.config_file, validate=False)
 
-    # 환경 변수에서 STEP_LOGGER_NAME 가져오기 (fallback: inference)
     logger_name = os.environ.get("STEP_LOGGER_NAME", "inference")
-    logger = setup_logger(logger_name, log_file=config_loader.get_log_file())
+    log_file = config_loader.get_log_file()
+    log_level = config_loader.get_log_level()  # ✅ config.yaml과 연동
 
-    logger.info("Running step inference with config: %s", args.config_file)
-    # 여기에 step 로직
+    logger = setup_logger(logger_name, log_file=log_file, level=log_level)
+    logger.info("Running step 'inference' with config: %s", args.config_file)
+
+    # step 로직 here...

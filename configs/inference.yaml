@@ -1,4 +1,4 @@
 # b.yaml 파일도 마찬가지로 step에 필요한 설정만 포함
-step_b_config:
+config:
   param1: value1
   param2: value2

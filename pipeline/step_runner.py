@@ -1,8 +1,7 @@
-# pipeline/step_runner.py
-
 import subprocess
 import os
 import time
+import json
 from typing import Literal
 from pipeline.logger import setup_logger  # ✅ 개선된 로거 사용
 
@@ -22,17 +21,13 @@ class StepRunner:
         self.script = script_path
         self.config = config_path
 
-        # 기본값 설정
         self.log_file = log_file or "logs/pipeline.log"
         self.log_level = log_level or os.environ.get("LOG_LEVEL", "INFO")
-
-        # logger가 전달되지 않았을 경우 setup
         self.logger = logger or setup_logger(
             name,
             log_file=self.log_file,
             level=self.log_level
         )
-
         self.project_dir = project_dir
         self.retries = retries
 
@@ -55,16 +50,32 @@ class StepRunner:
                     check=True
                 )
 
+                stdout_clean = result.stdout.strip()
+                stderr_clean = result.stderr.strip()
+
+                # 🔍 try parsing JSON from stdout
+                try:
+                    output_json = json.loads(stdout_clean)
+                    if output_json.get("skipped"):
+                        self.logger.warning(f"[{self.name}] ⚠️ Step skipped by logic.")
+                        return {
+                            "skipped": True,
+                            "stdout": stdout_clean,
+                            "stderr": stderr_clean
+                        }
+                except Exception:
+                    pass  # Ignore if not JSON
+
                 self.logger.info(f"[{self.name}] ✅ Success")
-                if result.stdout.strip():
-                    self.logger.info(f"[{self.name}] stdout:\n{result.stdout.strip()}")
-                if result.stderr.strip():
-                    self.logger.warning(f"[{self.name}] stderr:\n{result.stderr.strip()}")
+                if stdout_clean:
+                    self.logger.info(f"[{self.name}] stdout:\n{stdout_clean}")
+                if stderr_clean:
+                    self.logger.warning(f"[{self.name}] stderr:\n{stderr_clean}")
 
                 return {
                     "success": True,
-                    "stdout": result.stdout.strip(),
-                    "stderr": result.stderr.strip()
+                    "stdout": stdout_clean,
+                    "stderr": stderr_clean
                 }
 
             except subprocess.CalledProcessError as e:
