@@ -1,3 +1,4 @@
+name: ml_project_template
 global:
   env: prd
   db: BIZ_ML
@@ -11,7 +12,7 @@ global:
     tables:
       customer: TEST
       history: HISTORY_TABLE  # 예시 추가
-      
+
 logging:
   log_file: logs/pipeline.log
   level: INFO

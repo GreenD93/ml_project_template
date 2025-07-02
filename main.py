@@ -18,13 +18,12 @@ if __name__ == "__main__":
     args = parse_args()
 
     config_loader = ConfigLoader(args.config_file)
-    logger = setup_logger("main", log_file=config_loader.get_log_file(), level=config_loader.get_log_level())
+    project_name = config_loader.config_data.get("name", "main")
+
+    logger = setup_logger(project_name, log_file=config_loader.get_log_file(), level=config_loader.get_log_level())
 
     builder = PipelineBuilder(config_loader, target_date=args.target_date)
-    print('-'*50)
-    print(args.target_date)
-    print(args.step)
-    print('-'*50)
+
     if args.step:
         if args.step not in builder.get_step_names():
             logger.error(f"❌ Step '{args.step}' not defined in DAG.")
