@@ -1,29 +1,40 @@
-# steps/train/train.py
-
+# steps/preprocess/preprocess.py
+import time
+import json
 import argparse
 import os
 from pipeline.config_loader import ConfigLoader
-from pipeline.logger import setup_logger  # ✅ 변경됨
-import time
+from pipeline.logger import setup_logger
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Step: preprocess")
-    parser.add_argument('--config_file', type=str, help='Path to config file', required=True)
+    parser.add_argument('--config_file', type=str, required=True)
     parser.add_argument('--global_config_file', type=str, required=False)
     parser.add_argument('--target_date', type=str, required=True)
     return parser.parse_args()
 
 if __name__ == "__main__":
+
     args = parse_args()
     config_loader = ConfigLoader(args.config_file, validate=False)
+    preprocess_config = config_loader.config_data.get("config", {})
 
-    logger_name = os.environ.get("STEP_LOGGER_NAME", "preprocess")
-    log_file = config_loader.get_log_file()
-    log_level = config_loader.get_log_level()  # ✅ config.yaml과 연동
+    global_config_path = (
+        args.global_config_file
+        or os.environ.get("GLOBAL_CONFIG")
+        or "configs/config.yaml"
+    )
+    global_loader = ConfigLoader(global_config_path, validate=False)
+    global_config = global_loader.get_global_config()
 
-    logger = setup_logger(logger_name, log_file=log_file, level=log_level)
-    logger.info("Running step 'preprocess' with config: %s", args.config_file)
 
-    # step 로직 here...
+    logger_name = preprocess_config.get("name", "preprocess")
+    logger = setup_logger(logger_name, log_file=global_loader.get_log_file(), level=global_loader.get_log_level())
+
+    logger.info(f"Training config loaded: {preprocess_config}")
+    logger.info(f"[INFO] Global config: env={global_config.env}, db={global_config.db}, s3={global_config.s3.base_output}")
+    logger.info(f"[INFO] Step config: {json.dumps(preprocess_config, indent=2)}")
 
     time.sleep(5)
+
+    print(json.dumps({"success": True}))
