@@ -9,6 +9,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="ML Workflow")
     parser.add_argument('--config_file', type=str, required=True, default='configs/config.yaml')
     parser.add_argument('--step', type=str, help='Run only specific step')
+    parser.add_argument('--target_date', type=str, help='Run only specific date')
     parser.add_argument('--parallel', action='store_true', default=True)
 
     return parser.parse_args()
@@ -19,14 +20,20 @@ if __name__ == "__main__":
     config_loader = ConfigLoader(args.config_file)
     logger = setup_logger("main", log_file=config_loader.get_log_file(), level=config_loader.get_log_level())
 
-    builder = PipelineBuilder(config_loader)
-
+    builder = PipelineBuilder(config_loader, target_date=args.target_date)
+    print('-'*50)
+    print(args.target_date)
+    print(args.step)
+    print('-'*50)
     if args.step:
         if args.step not in builder.get_step_names():
             logger.error(f"❌ Step '{args.step}' not defined in DAG.")
             sys.exit(1)
+
         logger.info(f"Running only step: {args.step}")
         builder.run_step(args.step)
+
+        sys.exit(0)  # ✅ 여기 추가: 단일 step 실행 후 종료
 
     if args.parallel:
         builder.run_all_parallel(max_workers=4)

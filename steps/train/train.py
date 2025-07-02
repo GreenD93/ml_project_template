@@ -1,38 +1,49 @@
 # steps/train/train.py
+
 import sys, json
 import argparse
 import os
 from pipeline.config_loader import ConfigLoader
-from pipeline.logger import setup_logger  # ✅ 변경됨
+from pipeline.logger import setup_logger
+from steps.settings import GlobalConfig
+from steps.train.queries.train_dataset_etl_query import generate_train_dataset_etl_query
 
 def training_needed():
-    # 파일 존재 여부, 날짜, 메타데이터 판단 등
-    return False
+    return True
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Step: train")
-    parser.add_argument('--config_file', type=str, help='Path to config file', required=True)
+    parser.add_argument('--config_file', type=str, required=True)
+    parser.add_argument('--global_config_file', type=str, required=False)
+    parser.add_argument('--target_date', type=str, required=True)
     return parser.parse_args()
 
 if __name__ == "__main__":
-
     if not training_needed():
         print(json.dumps({"skipped": True}))
         sys.exit(0)
 
     args = parse_args()
     config_loader = ConfigLoader(args.config_file, validate=False)
-
-    logger_name = os.environ.get("STEP_LOGGER_NAME", "train")
-    log_file = config_loader.get_log_file()
-    log_level = config_loader.get_log_level()  # ✅ config.yaml과 연동
-
-    logger = setup_logger(logger_name, log_file=log_file, level=log_level)
-
-    # ✅ 실제 파라미터 출력
     train_config = config_loader.config_data.get("config", {})
-    logger.info(f"Training config loaded: {train_config}")
-    logger.info(f"[INFO] Training config: {json.dumps(train_config, indent=2)}")
 
-    # 실제 로직 실행
+    global_config_path = (
+        args.global_config_file
+        or os.environ.get("GLOBAL_CONFIG")
+        or "configs/config.yaml"
+    )
+    global_loader = ConfigLoader(global_config_path, validate=False)
+    global_config = global_loader.get_global_config()
+
+
+    logger_name = train_config.get("name", "train")
+    logger = setup_logger(logger_name, log_file=global_loader.get_log_file(), level=global_loader.get_log_level())
+
+    logger.info(f"Training config loaded: {train_config}")
+    logger.info(f"[INFO] Global config: env={global_config.env}, db={global_config.db}, s3={global_config.s3.base_output}")
+    logger.info(f"[INFO] Step config: {json.dumps(train_config, indent=2)}")
+
+    query = generate_train_dataset_etl_query(cfg=global_config, target_date=args.target_date)
+    logger.info(f"[QUERY]\n{query}")
+
     print(json.dumps({"success": True}))

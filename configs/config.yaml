@@ -1,3 +1,17 @@
+global:
+  env: prd
+  db: BIZ_ML
+  workgroup: curationlab
+
+  s3:
+    base_output: s3://your-bucket/output
+    tmp_output: s3://your-bucket/tmp
+
+  athena:
+    tables:
+      customer: TEST
+      history: HISTORY_TABLE  # 예시 추가
+      
 logging:
   log_file: logs/pipeline.log
   level: INFO

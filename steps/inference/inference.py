@@ -8,6 +8,8 @@ from pipeline.logger import setup_logger  # ✅ 변경됨
 def parse_args():
     parser = argparse.ArgumentParser(description="Step: inference")
     parser.add_argument('--config_file', type=str, help='Path to config file', required=True)
+    parser.add_argument('--global_config_file', type=str, required=False)
+    parser.add_argument('--target_date', type=str, required=True)
     return parser.parse_args()
 
 if __name__ == "__main__":

@@ -13,4 +13,4 @@ PROJECT_DIR=$(python -c "import yaml; print(yaml.safe_load(open('$CONFIG_FILE'))
 export PYTHONPATH=$PROJECT_DIR/pipeline:$PYTHONPATH  # pipeline 디렉토리를 PYTHONPATH로 추가
 
 # Python 스크립트를 실행, config_file 인자 전달
-python main.py --config_file $CONFIG_FILE --target_date 20250523
+python main.py --config_file $CONFIG_FILE --target_date 20250523 --step train

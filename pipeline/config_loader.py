@@ -1,20 +1,13 @@
 # pipeline/config_loader.py
 import os
 import yaml
+from steps.settings import *
 
 class ConfigLoader:
-    def __init__(self, config_file: str, project_dir: str = None, validate: bool = True):
+    def __init__(self, config_file: str, validate: bool = True):
+
         self.config_file = config_file
         self.config_data = self._load_config(config_file)
-
-        self.project_dir = (
-            project_dir
-            or self.config_data.get("paths", {}).get("project_dir")
-            or os.environ.get("PROJECT_DIR")
-        )
-
-        if not self.project_dir:
-            raise ValueError("project_dir must be specified in config.yaml or via env var PROJECT_DIR")
 
         if validate:
             self._validate_config()
@@ -39,3 +32,9 @@ class ConfigLoader:
 
     def get_log_level(self):
         return self.config_data.get("logging", {}).get("level", "INFO")
+    
+    def get_global_config(self) -> GlobalConfig:
+        global_data = self.config_data.get("global")
+        if not global_data:
+            raise ValueError("Missing 'global' section in config file")
+        return GlobalConfig.from_dict(global_data)

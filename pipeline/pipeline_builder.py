@@ -1,3 +1,4 @@
+# pipeline/pipeline_builder.py
 import os
 from collections import defaultdict, deque
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -8,13 +9,16 @@ def _run_step_wrapper(step: StepRunner):
     return step.name, step.run()
 
 class PipelineBuilder:
-    def __init__(self, config_loader, logger=None):
+    def __init__(self, config_loader, logger=None, target_date=None):
         self.config_loader = config_loader
-        self.logger = logger or setup_logger("pipeline", self.config_loader.get_log_file(), self.config_loader.get_log_level())
+        self.logger = logger or setup_logger(
+            "pipeline", self.config_loader.get_log_file(), self.config_loader.get_log_level()
+        )
+        self.target_date = target_date  # ✅ 먼저 정의
         self.steps = []
         self.failed_steps = []
-        self.skipped_steps = []  # ✅ 추가
-        self._register_steps()
+        self.skipped_steps = []
+        self._register_steps()  # ✅ 그 다음 호출
 
     def _register_steps(self):
         log_file = self.config_loader.get_log_file()
@@ -29,13 +33,15 @@ class PipelineBuilder:
             if not script or not config_rel_path:
                 raise ValueError(f"Step '{step_name}' must have 'script' and 'config'.")
 
-            config_path = os.path.join(self.config_loader.project_dir, config_rel_path)
-            if not os.path.exists(config_path):
-                raise FileNotFoundError(f"Config for step '{step_name}' not found: {config_path}")
+            if not os.path.exists(config_rel_path):
+                raise FileNotFoundError(f"Config for step '{step_name}' not found: {config_rel_path}")
 
             self.logger.info(f"Registering step: {step_name} -> {script}")
+            
             step_logger = setup_logger(step_name, log_file, log_level)
-            self.steps.append(StepRunner(step_name, script, config_path, log_file, step_logger, self.config_loader.project_dir, retries, log_level))
+            self.steps.append(StepRunner(step_name, script, config_rel_path, log_file, step_logger, 
+                                         retries, log_level,
+                                         target_date=self.target_date))
 
     def _build_dependency_graph(self):
         graph = defaultdict(list)

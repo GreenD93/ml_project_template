@@ -1,3 +1,4 @@
+# pipeline/step_runner.py
 import subprocess
 import os
 import time
@@ -13,9 +14,9 @@ class StepRunner:
         config_path,
         log_file=None,
         logger=None,
-        project_dir=None,
         retries=1,
-        log_level=None
+        log_level=None,
+        target_date=None
     ):
         self.name = name
         self.script = script_path
@@ -28,8 +29,9 @@ class StepRunner:
             log_file=self.log_file,
             level=self.log_level
         )
-        self.project_dir = project_dir
         self.retries = retries
+
+        self.target_date = target_date
 
     def run_subprocess(self) -> dict:
         self.logger.info(f"[{self.name}] Starting subprocess...")
@@ -38,11 +40,9 @@ class StepRunner:
         while attempt < self.retries:
             try:
                 env = os.environ.copy()
-                if self.project_dir:
-                    env["PROJECT_DIR"] = self.project_dir
 
                 result = subprocess.run(
-                    ["python", self.script, "--config_file", self.config],
+                    ["python", self.script, "--config_file", self.config, "--target_date", self.target_date],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     env=env,
