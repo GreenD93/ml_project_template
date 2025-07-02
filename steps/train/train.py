@@ -1,11 +1,9 @@
 # steps/train/train.py
-
 import sys, json
 import argparse
 import os
 from pipeline.config_loader import ConfigLoader
 from pipeline.logger import setup_logger
-from steps.settings import GlobalConfig
 from steps.train.queries.train_dataset_etl_query import generate_train_dataset_etl_query
 
 def training_needed():

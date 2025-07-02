@@ -23,14 +23,14 @@ paths:
 dag:
   preprocess:
     script: steps/preprocess/preprocess.py
-    config: configs/preprocess.yaml
+    config: configs/step_params/preprocess.yaml
 
   train:
     script: steps/train/train.py
-    config: configs/train.yaml
+    config: configs/step_params/train.yaml
     depends_on: [preprocess]
 
   inference:
     script: steps/inference/inference.py
-    config: configs/inference.yaml
+    config: configs/step_params/inference.yaml
     depends_on: []

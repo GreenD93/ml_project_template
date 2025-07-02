@@ -8,12 +8,14 @@ def _run_step_wrapper(step: StepRunner):
     return step.name, step.run()
 
 class PipelineBuilder:
-    def __init__(self, config_loader, logger=None, target_date=None):
+    def __init__(self, config_loader, logger=None, target_date=None, selected_step=None):
         self.config_loader = config_loader
         self.logger = logger or setup_logger(
             "pipeline", self.config_loader.get_log_file(), self.config_loader.get_log_level()
         )
         self.target_date = target_date
+        self.selected_step = selected_step
+
         self.steps = []
         self.failed_steps = []
         self.skipped_steps = []
@@ -47,6 +49,7 @@ class PipelineBuilder:
                 log_level=log_level,
                 target_date=self.target_date
             ))
+        self._print_dag_structure()
 
     def _build_dependency_graph(self):
         graph = defaultdict(list)
@@ -159,3 +162,56 @@ class PipelineBuilder:
                 self.logger.error(f" - {name}: {reason}")
         else:
             self.logger.info("🎉 All steps completed successfully.")
+
+    def _print_dag_structure(self):
+        self.logger.info("📊 DAG Structure:")
+        graph, _ = self._build_dependency_graph()
+
+        visited = set()
+
+        def dfs(node, depth=0):
+            indent = "  " * depth
+            self.logger.info(f"{indent}- {node}")
+            visited.add(node)
+            for child in graph.get(node, []):
+                if child not in visited:
+                    dfs(child, depth + 1)
+
+        if self.selected_step:
+            # upstream dependency만 추적
+            reverse_graph = defaultdict(list)
+            for parent, children in graph.items():
+                for child in children:
+                    reverse_graph[child].append(parent)
+
+            # selected_step과 모든 선행 step 찾기
+            def get_ancestors(step):
+                ancestors = set()
+                stack = [step]
+                while stack:
+                    current = stack.pop()
+                    for parent in reverse_graph.get(current, []):
+                        if parent not in ancestors:
+                            ancestors.add(parent)
+                            stack.append(parent)
+                return ancestors
+
+            focus_steps = get_ancestors(self.selected_step) | {self.selected_step}
+
+            # DAG 구조 출력 (filtered)
+            def dfs_limited(node, depth=0):
+                if node not in focus_steps or node in visited:
+                    return
+                indent = "  " * depth
+                self.logger.info(f"{indent}- {node}")
+                visited.add(node)
+                for child in graph.get(node, []):
+                    dfs_limited(child, depth + 1)
+
+            dfs_limited(self.selected_step)
+
+        else:
+            # 전체 DAG 출력 (기존대로)
+            roots = [step for step in self.get_step_names() if step not in {n for deps in graph.values() for n in deps}]
+            for root in roots:
+                dfs(root)

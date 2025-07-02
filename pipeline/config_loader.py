@@ -1,6 +1,5 @@
-import os
 import yaml
-from steps.settings import GlobalConfig  # ✅ 명시적 import 권장
+from steps.settings import GlobalConfig
 
 class ConfigLoader:
     def __init__(self, config_file: str, validate: bool = True):
