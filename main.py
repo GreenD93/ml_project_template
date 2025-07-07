@@ -11,6 +11,7 @@ def parse_args():
     parser.add_argument('--step', type=str, help='Run only specific step')
     parser.add_argument('--target_date', type=str, help='Run only specific date')
     parser.add_argument('--parallel', action='store_true', default=True)
+    parser.add_argument('--visualize_dag', action='store_true', default=True, help='Save DAG as an image')
 
     return parser.parse_args()
 
@@ -39,3 +40,6 @@ if __name__ == "__main__":
         builder.run_all_parallel(max_workers=4)
     else:
         builder.run_all()
+
+    if args.visualize_dag:
+        builder.visualize_dag()

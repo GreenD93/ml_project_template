@@ -4,6 +4,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pipeline.step_runner import StepRunner
 from pipeline.logger import setup_logger
 
+import networkx as nx
+import matplotlib.pyplot as plt
+
 def _run_step_wrapper(step: StepRunner):
     return step.name, step.run()
 
@@ -215,3 +218,78 @@ class PipelineBuilder:
             roots = [step for step in self.get_step_names() if step not in {n for deps in graph.values() for n in deps}]
             for root in roots:
                 dfs(root)
+
+    def visualize_dag(self, output_file="dag_parallel.png"):
+        import networkx as nx
+        import pydot
+        from collections import defaultdict, deque
+        from networkx.drawing.nx_pydot import to_pydot
+
+        # DAG 정보 생성
+        graph, _ = self._build_dependency_graph()
+        G = nx.DiGraph()
+
+        for step in self.get_step_names():
+            G.add_node(step)
+
+        for parent, children in graph.items():
+            for child in children:
+                G.add_edge(parent, child)
+
+        # 실행 상태별 노드 분류
+        failed_set = {s[0] for s in self.failed_steps}
+        skipped_set = set(self.skipped_steps)
+        success_set = set(self.get_step_names()) - failed_set - skipped_set
+
+        # DAG 계층 구조 계산
+        in_degree = defaultdict(int)
+        for u, v in G.edges():
+            in_degree[v] += 1
+
+        queue = deque([node for node in G.nodes() if in_degree[node] == 0])
+        level = {node: 0 for node in queue}
+
+        while queue:
+            current = queue.popleft()
+            for neighbor in G.successors(current):
+                if neighbor not in level:
+                    level[neighbor] = level[current] + 1
+                else:
+                    level[neighbor] = max(level[neighbor], level[current] + 1)
+                queue.append(neighbor)
+
+        # to_pydot 변환 후 레이아웃 설정
+        pydot_graph = to_pydot(G)
+        pydot_graph.set("rankdir", "LR")  # ← 왼쪽에서 오른쪽 방향 설정
+        pydot_graph.set("splines", "ortho")
+
+        # 노드 색상 설정
+        for node in pydot_graph.get_nodes():
+            name = node.get_name().strip('"')
+            if name in failed_set:
+                node.set_style("filled")
+                node.set_fillcolor("red")
+            elif name in skipped_set:
+                node.set_style("filled")
+                node.set_fillcolor("orange")
+            elif name in success_set:
+                node.set_style("filled")
+                node.set_fillcolor("green")
+            else:
+                node.set_style("filled")
+                node.set_fillcolor("lightgray")
+
+        # 같은 레벨 노드들 정렬 (rank = same)
+        level_dict = defaultdict(list)
+        for node, lvl in level.items():
+            level_dict[lvl].append(node)
+
+        for same_level_nodes in level_dict.values():
+            subgraph = pydot.Subgraph(rank='same')
+            for node_name in same_level_nodes:
+                subgraph.add_node(pydot.Node(node_name))
+            pydot_graph.add_subgraph(subgraph)
+
+        # 저장
+        pydot_graph.write_png(output_file)
+        self.logger.info(f"📊 DAG visualization (left-to-right) saved to '{output_file}'")
