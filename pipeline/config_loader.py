@@ -1,3 +1,5 @@
+# pipeline/config_loader.py
+
 import yaml
 from steps.settings import GlobalConfig
 

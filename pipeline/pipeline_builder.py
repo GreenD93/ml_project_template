@@ -1,11 +1,10 @@
+# pipeline/pipeline_builder.py
+
 import os
 from collections import defaultdict, deque
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pipeline.step_runner import StepRunner
 from pipeline.logger import setup_logger
-
-import networkx as nx
-import matplotlib.pyplot as plt
 
 def _run_step_wrapper(step: StepRunner):
     return step.name, step.run()
