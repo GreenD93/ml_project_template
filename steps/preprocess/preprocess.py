@@ -22,6 +22,7 @@ if __name__ == "__main__":
     global_config_path = (
         args.global_config_file
         or os.environ.get("GLOBAL_CONFIG")
+        or "configs/config.yaml"
     )
     global_loader = ConfigLoader(global_config_path, validate=False)
     global_config = global_loader.get_global_config()
