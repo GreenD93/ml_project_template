@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
 
     logger_name = train_config.get("name", "train")
-    logger = setup_logger(logger_name, log_file=global_loader.get_log_file(), level=global_loader.get_log_level())
+    logger = setup_logger(logger_name, log_file=global_loader.get_log_file(), level=global_loader.get_log_level(), stream_to_stdout=True)
 
     logger.info(f"Training config loaded: {train_config}")
     logger.info(f"[INFO] Global config: env={global_config.env}, db={global_config.db}, s3={global_config.s3.base_output}")

@@ -1,13 +1,13 @@
-# pipeline/pipeline_builder.py
-
 import os
 from collections import defaultdict, deque
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pipeline.step_runner import StepRunner
 from pipeline.logger import setup_logger
 
+
 def _run_step_wrapper(step: StepRunner):
     return step.name, step.run()
+
 
 class PipelineBuilder:
     def __init__(self, config_loader, logger=None, target_date=None, selected_step=None):
@@ -109,7 +109,6 @@ class PipelineBuilder:
             self.failed_steps.append((step_name, result.get("error")))
 
     def run_all_parallel(self, max_workers=4):
-        
         self.logger.info("🚀 DAG parallel execution started.")
         graph, in_degree = self._build_dependency_graph()
         name_to_step = {step.name: step for step in self.steps}
@@ -117,9 +116,8 @@ class PipelineBuilder:
         queue = deque([name for name in in_degree if in_degree[name] == 0])
         success_steps = []
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             while queue:
-
                 futures = {
                     executor.submit(_run_step_wrapper, name_to_step[step_name]): step_name
                     for step_name in list(queue)
@@ -128,6 +126,9 @@ class PipelineBuilder:
 
                 for future in as_completed(futures):
                     step_name, result = future.result()
+
+                    # 실시간 출력은 StepRunner 내부에서 로깅됨
+                    # 여기선 결과 출력만 요약용으로 보여줌
                     if result.get("success"):
                         self.logger.info(f"✅ Step '{step_name}' completed.")
                         success_steps.append(step_name)
@@ -168,7 +169,6 @@ class PipelineBuilder:
     def _print_dag_structure(self):
         self.logger.info("📊 DAG Structure:")
         graph, _ = self._build_dependency_graph()
-
         visited = set()
 
         def dfs(node, depth=0):
@@ -180,13 +180,11 @@ class PipelineBuilder:
                     dfs(child, depth + 1)
 
         if self.selected_step:
-            # upstream dependency만 추적
             reverse_graph = defaultdict(list)
             for parent, children in graph.items():
                 for child in children:
                     reverse_graph[child].append(parent)
 
-            # selected_step과 모든 선행 step 찾기
             def get_ancestors(step):
                 ancestors = set()
                 stack = [step]
@@ -200,7 +198,6 @@ class PipelineBuilder:
 
             focus_steps = get_ancestors(self.selected_step) | {self.selected_step}
 
-            # DAG 구조 출력 (filtered)
             def dfs_limited(node, depth=0):
                 if node not in focus_steps or node in visited:
                     return
@@ -213,7 +210,6 @@ class PipelineBuilder:
             dfs_limited(self.selected_step)
 
         else:
-            # 전체 DAG 출력 (기존대로)
             roots = [step for step in self.get_step_names() if step not in {n for deps in graph.values() for n in deps}]
             for root in roots:
                 dfs(root)
@@ -221,26 +217,21 @@ class PipelineBuilder:
     def visualize_dag(self, output_file="dag_parallel.png"):
         import networkx as nx
         import pydot
-        from collections import defaultdict, deque
         from networkx.drawing.nx_pydot import to_pydot
 
-        # DAG 정보 생성
         graph, _ = self._build_dependency_graph()
         G = nx.DiGraph()
 
         for step in self.get_step_names():
             G.add_node(step)
-
         for parent, children in graph.items():
             for child in children:
                 G.add_edge(parent, child)
 
-        # 실행 상태별 노드 분류
         failed_set = {s[0] for s in self.failed_steps}
         skipped_set = set(self.skipped_steps)
         success_set = set(self.get_step_names()) - failed_set - skipped_set
 
-        # DAG 계층 구조 계산
         in_degree = defaultdict(int)
         for u, v in G.edges():
             in_degree[v] += 1
@@ -257,12 +248,10 @@ class PipelineBuilder:
                     level[neighbor] = max(level[neighbor], level[current] + 1)
                 queue.append(neighbor)
 
-        # to_pydot 변환 후 레이아웃 설정
         pydot_graph = to_pydot(G)
-        pydot_graph.set("rankdir", "LR")  # ← 왼쪽에서 오른쪽 방향 설정
+        pydot_graph.set("rankdir", "LR")
         pydot_graph.set("splines", "ortho")
 
-        # 노드 색상 설정
         for node in pydot_graph.get_nodes():
             name = node.get_name().strip('"')
             if name in failed_set:
@@ -278,7 +267,6 @@ class PipelineBuilder:
                 node.set_style("filled")
                 node.set_fillcolor("lightgray")
 
-        # 같은 레벨 노드들 정렬 (rank = same)
         level_dict = defaultdict(list)
         for node, lvl in level.items():
             level_dict[lvl].append(node)
@@ -289,6 +277,5 @@ class PipelineBuilder:
                 subgraph.add_node(pydot.Node(node_name))
             pydot_graph.add_subgraph(subgraph)
 
-        # 저장
         pydot_graph.write_png(output_file)
-        self.logger.info(f"📊 DAG visualization (left-to-right) saved to '{output_file}'")
+        self.logger.info(f"📊 DAG visualization saved to '{output_file}'")

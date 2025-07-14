@@ -2,10 +2,11 @@
 
 import logging
 import os
+import sys
 
 _logger_cache = {}
 
-def setup_logger(name: str, log_file: str = "logs/pipeline.log", level: str = "INFO") -> logging.Logger:
+def setup_logger(name: str, log_file: str = "logs/pipeline.log", level: str = "INFO", stream_to_stdout: bool = False) -> logging.Logger:
     if name in _logger_cache:
         return _logger_cache[name]
 
@@ -15,17 +16,18 @@ def setup_logger(name: str, log_file: str = "logs/pipeline.log", level: str = "I
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
     logger.propagate = False  # 중복 출력 방지
 
-    if not logger.handlers:  # 중복 방지
+    if not logger.handlers:
         formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(name)s: %(message)s')
 
         # File handler
         fh = logging.FileHandler(log_file)
-        fh.setLevel(logging.DEBUG)  # 파일에는 항상 상세히 기록
+        fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
 
         # Console handler
-        ch = logging.StreamHandler()
+        console_stream = sys.stdout if stream_to_stdout else sys.stderr
+        ch = logging.StreamHandler(console_stream)
         ch.setLevel(getattr(logging, level.upper(), logging.INFO))
         ch.setFormatter(formatter)
         logger.addHandler(ch)
