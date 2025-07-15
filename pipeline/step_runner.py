@@ -1,3 +1,5 @@
+# pipeline/step_runner.py
+
 import subprocess
 import os
 import time
@@ -6,6 +8,7 @@ import threading
 from typing import Literal, Optional
 from pipeline.logger import setup_logger
 
+ERROR_KEYWORDS = {"traceback", "error", "exception", "failed", "fatal"}
 
 class StepRunner:
     def __init__(
@@ -28,13 +31,18 @@ class StepRunner:
         self.retries = retries
         self.target_date = target_date
 
-    def _log_stream(self, pipe, log_func, collector):
+    def _log_stream(self, pipe, collector: list):
         try:
             for line in iter(pipe.readline, ''):
-                log_func(f"[{self.name}] {line.rstrip()}")
-                collector.append(line.rstrip())
+                line = line.rstrip()
+                collector.append(line)
+
+                if any(kw in line.lower() for kw in ERROR_KEYWORDS):
+                    self.logger.error(f"[{self.name}] {line}")
+                else:
+                    self.logger.info(f"[{self.name}] {line}")
         except Exception as e:
-            log_func(f"[{self.name}] ⚠️ stream error: {str(e)}")
+            self.logger.error(f"[{self.name}] ⚠️ stream error: {str(e)}")
 
     def run_subprocess(self) -> dict:
         self.logger.info(f"[{self.name}] Starting subprocess...")
@@ -53,43 +61,35 @@ class StepRunner:
                 process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
                     env=env,
                     text=True,
-                    bufsize=1  # line buffered
+                    bufsize=1
                 )
 
                 stdout_lines = []
-                stderr_lines = []
-
-                t_out = threading.Thread(target=self._log_stream, args=(process.stdout, self.logger.info, stdout_lines), daemon=True)
-                t_err = threading.Thread(target=self._log_stream, args=(process.stderr, self.logger.warning, stderr_lines), daemon=True)
-
+                t_out = threading.Thread(target=self._log_stream, args=(process.stdout, stdout_lines), daemon=True)
                 t_out.start()
-                t_err.start()
 
                 return_code = process.wait()
-                
                 t_out.join()
-                t_err.join()
 
                 stdout_clean = "\n".join(stdout_lines)
-                stderr_clean = "\n".join(stderr_lines)
 
                 if return_code == 0:
                     try:
                         output_json = json.loads(stdout_clean)
                         if output_json.get("skipped"):
                             self.logger.warning(f"[{self.name}] ⚠️ Step skipped by logic.")
-                            return {"skipped": True, "stdout": stdout_clean, "stderr": stderr_clean}
+                            return {"skipped": True, "stdout": stdout_clean, "stderr": ""}
                     except json.JSONDecodeError:
                         pass
 
                     self.logger.info(f"[{self.name}] ✅ Success")
-                    return {"success": True, "stdout": stdout_clean, "stderr": stderr_clean}
+                    return {"success": True, "stdout": stdout_clean, "stderr": ""}
                 else:
                     self.logger.error(f"[{self.name}] ❌ Failed with return code {return_code}")
-                    return {"success": False, "stdout": stdout_clean, "stderr": stderr_clean}
+                    return {"success": False, "stdout": stdout_clean, "stderr": ""}
 
             except Exception as e:
                 self.logger.exception(f"[{self.name}] ❌ Unexpected error: {str(e)}")

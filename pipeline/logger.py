@@ -14,22 +14,21 @@ def setup_logger(name: str, log_file: str = "logs/pipeline.log", level: str = "I
 
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
-    logger.propagate = False  # 중복 출력 방지
+    logger.propagate = False
 
     if not logger.handlers:
-        formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(name)s: %(message)s')
 
-        # File handler
+        file_formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(name)s: %(message)s')
+        console_formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s')
+
         fh = logging.FileHandler(log_file)
         fh.setLevel(logging.DEBUG)
-        fh.setFormatter(formatter)
+        fh.setFormatter(file_formatter)
         logger.addHandler(fh)
 
-        # Console handler
-        console_stream = sys.stdout if stream_to_stdout else sys.stderr
-        ch = logging.StreamHandler(console_stream)
+        ch = logging.StreamHandler(sys.stdout if stream_to_stdout else sys.stderr)
         ch.setLevel(getattr(logging, level.upper(), logging.INFO))
-        ch.setFormatter(formatter)
+        ch.setFormatter(console_formatter)
         logger.addHandler(ch)
 
     _logger_cache[name] = logger
