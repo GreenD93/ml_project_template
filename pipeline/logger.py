@@ -6,7 +6,14 @@ import sys
 
 _logger_cache = {}
 
-def setup_logger(name: str, log_file: str = "logs/pipeline.log", level: str = "INFO", stream_to_stdout: bool = False) -> logging.Logger:
+def setup_logger(
+    name: str,
+    log_file: str = "logs/pipeline.log",
+    level: str = "INFO",
+    stream_to_stdout: bool = False,
+    env: str = "DEV"  # "DEV" 또는 "PRD"
+) -> logging.Logger:
+    
     if name in _logger_cache:
         return _logger_cache[name]
 
@@ -18,8 +25,10 @@ def setup_logger(name: str, log_file: str = "logs/pipeline.log", level: str = "I
 
     if not logger.handlers:
 
-        file_formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(name)s: %(message)s')
-        console_formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s')
+        env_tag = f"[{env.upper()}]"
+
+        file_formatter = logging.Formatter(f"{env_tag} [%(asctime)s] %(levelname)s %(name)s: %(message)s")
+        console_formatter = logging.Formatter(f"{env_tag} [%(asctime)s] [%(levelname)s] %(message)s")
 
         fh = logging.FileHandler(log_file)
         fh.setLevel(logging.DEBUG)
