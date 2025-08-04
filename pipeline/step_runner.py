@@ -33,6 +33,8 @@ class StepRunner:
         self.target_date = target_date
 
     def _log_stream(self, pipe, collector: list, default_level="INFO"):
+        import re
+
         try:
             traceback_buffer = []
             in_traceback = False
@@ -41,34 +43,44 @@ class StepRunner:
                 line = line.rstrip()
                 collector.append(line)
 
-                # start traceback block
-                if "Traceback (most recent call last):" in line:
+                # 1. traceback block 또는 SyntaxError 블럭 시작
+                if "Traceback (most recent call last):" in line or re.match(r'^\s*File ".*", line \d+', line):
                     in_traceback = True
-                    traceback_buffer.append(line)
+                    traceback_buffer = [line]
                     continue
 
-                # if already in traceback, keep collecting
+                # 2. traceback 블럭 안이면 계속 모은다
                 if in_traceback:
                     traceback_buffer.append(line)
                     if re.match(r"^\w*(Error|Exception|SyntaxError):", line.strip()):
-                        # traceback block ends here
+                        # traceback 끝났음
                         for tb_line in traceback_buffer:
                             self.logger.error(f"[{self.name}] {tb_line}")
                         traceback_buffer.clear()
                         in_traceback = False
                     continue
 
-                # fallback classification
+                # 3. 로그 레벨이 포맷에 명시된 경우 ([INFO], [WARNING] 등)
+                match = re.search(r"\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]", line)
+                if match:
+                    level = match.group(1).upper()
+                    getattr(self.logger, level.lower())(f"[{self.name}] {line}")
+                    continue
+
+                # 4. fallback: 에러 키워드 포함
                 if any(kw in line.lower() for kw in ERROR_KEYWORDS):
                     self.logger.error(f"[{self.name}] {line}")
                 else:
-                    if default_level == "WARNING":
+                    # 5. fallback: 기본 레벨 사용
+                    if default_level.upper() == "WARNING":
                         self.logger.warning(f"[{self.name}] {line}")
+                    elif default_level.upper() == "ERROR":
+                        self.logger.error(f"[{self.name}] {line}")
                     else:
                         self.logger.info(f"[{self.name}] {line}")
 
         except Exception as e:
-            self.logger.error(f"[{self.name}] ⚠️ stream error: {str(e)}")
+            self.logger.error(f"[{self.name}] ⚠️ log stream error: {str(e)}")
 
     def run_subprocess(self) -> dict:
         self.logger.info(f"[{self.name}] Starting subprocess...")
@@ -97,7 +109,7 @@ class StepRunner:
                 stderr_lines = []
 
                 t_out = threading.Thread(target=self._log_stream, args=(process.stdout, stdout_lines), daemon=True)
-                t_err = threading.Thread(target=self._log_stream, args=(process.stderr, stderr_lines), daemon=True)
+                t_err = threading.Thread(target=self._log_stream, args=(process.stderr, stderr_lines, "ERROR"), daemon=True)
 
                 t_out.start()
                 t_err.start()
