@@ -12,6 +12,9 @@ def _run_step_wrapper(step: StepRunner):
 class PipelineBuilder:
     def __init__(self, config_loader, logger=None, target_date=None, selected_step=None):
         self.config_loader = config_loader
+
+        self.env = self.config_loader.config_data.get("global")['env']
+
         self.logger = logger or setup_logger(
             "pipeline", self.config_loader.get_log_file(), self.config_loader.get_log_level()
         )
@@ -84,8 +87,7 @@ class PipelineBuilder:
                 self.logger.warning(f"⚠️ Step '{step.name}' was skipped.")
                 self.skipped_steps.append(step.name)
             else:
-                self.logger.error(f"❌ Step '{step.name}' failed: {result.get('error')}")
-                self.logger.error(f"stdout:\n{result.get('stdout')}\nstderr:\n{result.get('stderr')}")
+                self.logger.error(f"❌ Step '{step.name}' failed: {result.get('stderr')}")
                 self.failed_steps.append((step.name, result.get("error")))
 
         self._print_summary(success_steps)
@@ -104,8 +106,7 @@ class PipelineBuilder:
             self.logger.warning(f"⚠️ Step '{step_name}' was skipped by logic.")
             self.skipped_steps.append(step_name)
         else:
-            self.logger.error(f"❌ Step '{step_name}' failed: {result.get('error')}")
-            self.logger.error(f"stdout:\n{result.get('stdout')}\nstderr:\n{result.get('stderr')}")
+            self.logger.error(f"❌ Step '{step_name}' failed: {result.get('stderr')}")
             self.failed_steps.append((step_name, result.get("error")))
 
     def run_all_parallel(self, max_workers=4):
@@ -146,8 +147,8 @@ class PipelineBuilder:
                             if in_degree[neighbor] == 0:
                                 queue.append(neighbor)
                     else:
-                        self.logger.error(f"❌ Step '{step_name}' failed: {result.get('error')}")
-                        self.failed_steps.append((step_name, result.get("error")))
+                        self.logger.error(f"❌ Step '{step_name}' failed: {result.get('stderr')}")
+                        self.failed_steps.append((step_name, result.get("stderr")))
                         self.logger.error("🛑 Aborting DAG execution due to failure.")
                         return
 

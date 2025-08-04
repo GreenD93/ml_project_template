@@ -50,3 +50,6 @@ if __name__ == "__main__":
     logger.info(f"[QUERY]\n{query}")
 
     print(json.dumps({"success": True}))
+
+    a = None
+    a.split('/')[0]]
