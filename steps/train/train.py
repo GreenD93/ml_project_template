@@ -34,10 +34,10 @@ if __name__ == "__main__":
     global_config = global_loader.get_global_config()
 
 
-    logger_name = train_config.get("name", "train")
+    step_name = train_config.get("name", "train")
     logger = setup_logger(
-        name=logger_name,
-        log_file=global_loader.get_log_file(),
+        name=step_name,
+        log_file=global_loader.get_log_file(step_name),
         level=global_loader.get_log_level(),
         stream_to_stdout=True  # 반드시 stdout
     )
@@ -50,6 +50,3 @@ if __name__ == "__main__":
     logger.info(f"[QUERY]\n{query}")
 
     print(json.dumps({"success": True}))
-
-    a = None
-    a.split('/')[0]]

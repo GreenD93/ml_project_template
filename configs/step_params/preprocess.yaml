@@ -1,4 +1,5 @@
 # a.yaml 파일은 실제 step에 필요한 설정만 포함
+name: preprocess
 config:
   param1: value1
   param2: value2

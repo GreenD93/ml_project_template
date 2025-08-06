@@ -29,10 +29,10 @@ if __name__ == "__main__":
     global_config = global_loader.get_global_config()
 
 
-    logger_name = inference_config.get("name", "inference")
+    step_name = inference_config.get("name", "inference")
     logger = setup_logger(
-        name=logger_name,
-        log_file=global_loader.get_log_file(),
+        name=step_name,
+        log_file=global_loader.get_log_file(step_name),
         level=global_loader.get_log_level(),
         stream_to_stdout=True  # 반드시 stdout
     )

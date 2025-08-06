@@ -1,7 +1,7 @@
 name: ml_project_template
 global:
   env: prd
-  db: BIZ_ML
+  db: UTMP
   workgroup: curationlab
 
   s3:
@@ -15,6 +15,9 @@ global:
 
 logging:
   log_file: logs/pipeline.log
+  preprocess: logs/preprocess.log
+  train: logs/train.log
+  inference: logs/inference.log
   level: INFO
 
 paths:
@@ -28,9 +31,9 @@ dag:
   train:
     script: steps/train/train.py
     config: configs/step_params/train.yaml
-    depends_on: [preprocess]
+    depends_on: []
 
   inference:
     script: steps/inference/inference.py
     config: configs/step_params/inference.yaml
-    depends_on: []
+    depends_on: [preprocess, train]

@@ -27,8 +27,12 @@ class ConfigLoader:
             if field not in self.config_data:
                 raise ValueError(f"Missing '{field}' section in config file.")
 
-    def get_log_file(self) -> str:
-        return self.config_data.get("logging", {}).get("log_file", "logs/pipeline.log")
+    def get_log_file(self, step_name=None) -> str:
+        
+        if step_name:
+            return self.config_data.get("logging", {}).get(step_name, "logs/pipeline.log")
+        else:
+            return self.config_data.get("logging", {}).get("log_file", "logs/pipeline.log")
 
     def get_log_level(self) -> str:
         return self.config_data.get("logging", {}).get("level", "INFO")

@@ -36,6 +36,10 @@ class PipelineBuilder:
             config_path = step_info.get("config")
             retries = step_info.get("retries", 1)
 
+            step_logger = setup_logger(
+                step_name, self.config_loader.get_log_file(step_name), self.config_loader.get_log_level()
+            )
+
             if not script or not config_path:
                 raise ValueError(f"Step '{step_name}' must have 'script' and 'config'.")
 
@@ -49,7 +53,7 @@ class PipelineBuilder:
                 script_path=script,
                 config_path=config_path,
                 log_file=log_file,
-                logger=self.logger,
+                logger=step_logger,
                 retries=retries,
                 log_level=log_level,
                 target_date=self.target_date

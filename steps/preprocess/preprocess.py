@@ -28,8 +28,8 @@ if __name__ == "__main__":
     global_config = global_loader.get_global_config()
 
 
-    logger_name = preprocess_config.get("name", "preprocess")
-    logger = setup_logger(logger_name, log_file=global_loader.get_log_file(), level=global_loader.get_log_level(), stream_to_stdout=True)
+    step_name = preprocess_config.get("name", "preprocess")
+    logger = setup_logger(step_name, log_file=global_loader.get_log_file(step_name), level=global_loader.get_log_level(), stream_to_stdout=True)
 
     logger.info(f"Training config loaded: {preprocess_config}")
     logger.info(f"[INFO] Global config: env={global_config.env}, db={global_config.db}, s3={global_config.s3.base_output}")
