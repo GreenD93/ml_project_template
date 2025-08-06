@@ -27,7 +27,6 @@ class PipelineBuilder:
         self._register_steps()
 
     def _register_steps(self):
-        log_file = self.config_loader.get_log_file()
         log_level = self.config_loader.get_log_level()
         dag_config = self.config_loader.config_data.get("dag", {})
 
@@ -52,7 +51,6 @@ class PipelineBuilder:
                 name=step_name,
                 script_path=script,
                 config_path=config_path,
-                log_file=log_file,
                 logger=step_logger,
                 retries=retries,
                 log_level=log_level,

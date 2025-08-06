@@ -17,7 +17,6 @@ class StepRunner:
         name: str,
         script_path: str,
         config_path: str,
-        log_file: Optional[str] = None,
         logger=None,
         retries: int = 1,
         log_level: Optional[str] = None,
@@ -26,7 +25,6 @@ class StepRunner:
         self.name = name
         self.script = script_path
         self.config = config_path
-        self.log_file = log_file or "logs/pipeline.log"
         self.log_level = log_level or os.environ.get("LOG_LEVEL", "INFO")
         self.logger = logger or setup_logger(name, log_file=self.log_file, level=self.log_level)
         self.retries = retries
