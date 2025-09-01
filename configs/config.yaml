@@ -1,4 +1,8 @@
 name: ml_project_template
+
+options:
+  force: false   # true 로 설정하면, 부모 실패와 무관하게 강제로 계속 실행
+
 global:
   env: prd
   db: UTMP
@@ -37,3 +41,4 @@ dag:
     script: steps/inference/inference.py
     config: configs/step_params/inference.yaml
     depends_on: [preprocess, train]
+    force: true

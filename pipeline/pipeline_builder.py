@@ -1,3 +1,4 @@
+# pipeline/pipeline_builder.py
 import os
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -7,6 +8,23 @@ from pipeline.logger import setup_logger
 
 def _run_step_wrapper(step: StepRunner):
     return step.name, step.run()
+
+
+def _to_bool(value, default=False):
+    """입력값을 안전하게 bool로 변환"""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in {"true", "t", "yes", "y", "1", "on"}:
+            return True
+        if v in {"false", "f", "no", "n", "0", "off"}:
+            return False
+    return default
 
 
 class PipelineBuilder:
@@ -21,6 +39,20 @@ class PipelineBuilder:
         self.target_date = target_date
         self.selected_step = selected_step
 
+        # ✅ 입력/설정 안정성: force 안전 변환
+        options = self.config_loader.config_data.get("options", {}) or {}
+        self.global_force = _to_bool(options.get("force", False), default=False)
+
+        # DAG 섹션 캐시 (depends_on None → [])
+        raw_dag = self.config_loader.config_data.get("dag", {}) or {}
+        self.dag_cfg = {}
+        for name, info in raw_dag.items():
+            info = dict(info or {})
+            deps = info.get("depends_on")
+            if deps is None:
+                info["depends_on"] = []
+            self.dag_cfg[name] = info
+
         self.steps = []
         self.failed_steps = []
         self.skipped_steps = []
@@ -28,9 +60,8 @@ class PipelineBuilder:
 
     def _register_steps(self):
         log_level = self.config_loader.get_log_level()
-        dag_config = self.config_loader.config_data.get("dag", {})
 
-        for step_name, step_info in dag_config.items():
+        for step_name, step_info in self.dag_cfg.items():
             script = step_info.get("script")
             config_path = step_info.get("config")
             retries = step_info.get("retries", 1)
@@ -59,29 +90,38 @@ class PipelineBuilder:
         self._print_dag_structure()
 
     def _build_dependency_graph(self):
+        """
+        graph: parent -> [children]
+        in_degree: child -> #parents
+        reverse: child -> [parents]
+        """
         graph = defaultdict(list)
         in_degree = defaultdict(int)
-        dag_config = self.config_loader.config_data.get("dag", {})
+        reverse = defaultdict(list)
 
-        for step_name, step_info in dag_config.items():
-            deps = step_info.get("depends_on", [])
+        for step_name, step_info in self.dag_cfg.items():
+            deps = step_info.get("depends_on", []) or []
             for dep in deps:
                 graph[dep].append(step_name)
+                reverse[step_name].append(dep)
                 in_degree[step_name] += 1
             if step_name not in in_degree:
                 in_degree[step_name] = 0
-        return graph, in_degree
+
+        return graph, in_degree, reverse
 
     def get_step_names(self):
         return [step.name for step in self.steps]
 
     def run_all(self):
+        """순차 실행 (기존 동작 유지)"""
         self.logger.info("🚀 Pipeline execution started.")
         success_steps = []
 
         for step in self.steps:
             self.logger.info(f"▶️ Running step: {step.name}")
             result = step.run("subprocess")
+            reason = result.get("error") or result.get("stderr") or "unknown error"
 
             if result.get("success"):
                 success_steps.append(step.name)
@@ -89,8 +129,8 @@ class PipelineBuilder:
                 self.logger.warning(f"⚠️ Step '{step.name}' was skipped.")
                 self.skipped_steps.append(step.name)
             else:
-                self.logger.error(f"❌ Step '{step.name}' failed: {result.get('stderr')}")
-                self.failed_steps.append((step.name, result.get("error")))
+                self.logger.error(f"❌ Step '{step.name}' failed: {reason}")
+                self.failed_steps.append((step.name, reason))
 
         self._print_summary(success_steps)
 
@@ -102,57 +142,122 @@ class PipelineBuilder:
             return
 
         result = step.run("subprocess")
+        reason = result.get("error") or result.get("stderr") or "unknown error"
+
         if result.get("success"):
             self.logger.info(f"✅ Step '{step_name}' completed successfully.")
         elif result.get("skipped"):
             self.logger.warning(f"⚠️ Step '{step_name}' was skipped by logic.")
             self.skipped_steps.append(step_name)
         else:
-            self.logger.error(f"❌ Step '{step_name}' failed: {result.get('stderr')}")
-            self.failed_steps.append((step_name, result.get("error")))
+            self.logger.error(f"❌ Step '{step_name}' failed: {reason}")
+            self.failed_steps.append((step_name, reason))
 
     def run_all_parallel(self, max_workers=4):
+        """
+        병렬 실행 + 의존성 제어.
+        - 기본: 부모 성공이어야 자식 실행. 부모 실패/스킵 시 자식 스킵.
+        - 전역/스텝 force 활성: 부모 실패/스킵이어도 자식 강제 실행.
+        - force가 하나도 없으면, 최초 실패 시 전체 중단(기존 동작 유지).
+        """
         self.logger.info("🚀 DAG parallel execution started.")
-        graph, in_degree = self._build_dependency_graph()
+        graph, in_degree, reverse = self._build_dependency_graph()
         name_to_step = {step.name: step for step in self.steps}
+
+        # ✅ 스텝별 강제 실행 플래그 (입력 안정 변환)
+        step_force = {name: _to_bool(info.get("force", False), default=False) for name, info in self.dag_cfg.items()}
+        force_any = self.global_force or any(step_force.values())
+
+        # 상태 추적
+        status = {}   # name -> "success" | "skipped" | "failed"
         completed = set()
-        queue = deque([name for name in in_degree if in_degree[name] == 0])
         success_steps = []
 
+        # in_degree==0 루트 노드 큐
+        queue = deque([name for name, deg in in_degree.items() if deg == 0])
+
+        def _format_parent_statuses(child):
+            parents = reverse.get(child, [])
+            parts = [f"{p}={status.get(p, 'pending')}" for p in parents]
+            return ", ".join(parts) if parts else "(no-parents)"
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {}
+
+            # 초기 큐 제출
             while queue:
-                futures = {
-                    executor.submit(_run_step_wrapper, name_to_step[step_name]): step_name
-                    for step_name in list(queue)
-                }
-                queue.clear()
+                step_name = queue.popleft()
+                futures[executor.submit(_run_step_wrapper, name_to_step[step_name])] = step_name
 
-                for future in as_completed(futures):
-                    step_name, result = future.result()
+            while futures:
+                for future in as_completed(list(futures.keys())):
+                    step_name = futures.pop(future)
+                    try:
+                        _name, result = future.result()
+                    except Exception as e:
+                        result = {"success": False, "stderr": str(e)}
 
-                    # 실시간 출력은 StepRunner 내부에서 로깅됨
-                    # 여기선 결과 출력만 요약용으로 보여줌
+                    reason = result.get("error") or result.get("stderr") or "unknown error"
+
                     if result.get("success"):
                         self.logger.info(f"✅ Step '{step_name}' completed.")
+                        status[step_name] = "success"
                         success_steps.append(step_name)
-                        completed.add(step_name)
-                        for neighbor in graph[step_name]:
-                            in_degree[neighbor] -= 1
-                            if in_degree[neighbor] == 0:
-                                queue.append(neighbor)
                     elif result.get("skipped"):
                         self.logger.warning(f"⚠️ Step '{step_name}' was skipped.")
+                        status[step_name] = "skipped"
                         self.skipped_steps.append(step_name)
-                        completed.add(step_name)
-                        for neighbor in graph[step_name]:
-                            in_degree[neighbor] -= 1
-                            if in_degree[neighbor] == 0:
-                                queue.append(neighbor)
                     else:
-                        self.logger.error(f"❌ Step '{step_name}' failed: {result.get('stderr')}")
-                        self.failed_steps.append((step_name, result.get("stderr")))
-                        self.logger.error("🛑 Aborting DAG execution due to failure.")
-                        return
+                        self.logger.error(f"❌ Step '{step_name}' failed: {reason}")
+                        status[step_name] = "failed"
+                        self.failed_steps.append((step_name, reason))
+
+                    completed.add(step_name)
+
+                    # 자식 후보 in_degree 갱신 및 평가
+                    for child in graph.get(step_name, []):
+                        in_degree[child] -= 1
+                        if in_degree[child] == 0:
+                            parents = reverse.get(child, [])
+                            parent_statuses = [status.get(p) for p in parents]
+                            any_parent_not_success = any(s != "success" for s in parent_statuses)
+
+                            if any_parent_not_success and not (self.global_force or step_force.get(child, False)):
+                                # 강제 아님 → 스킵 (부모 상태 함께 로깅)
+                                self.logger.warning(
+                                    f"⏭️  Skipping '{child}' due to non-success dependency "
+                                    f"(parents: {_format_parent_statuses(child)}); force is off."
+                                )
+                                status[child] = "skipped"
+                                self.skipped_steps.append(child)
+                                completed.add(child)
+
+                                # 손자들 in_degree 감소 전파
+                                for gchild in graph.get(child, []):
+                                    in_degree[gchild] -= 1
+                                    if in_degree[gchild] == 0:
+                                        queue.append(gchild)
+                                continue
+
+                            # 실행 가능 (정상 또는 강제)
+                            if any_parent_not_success and (self.global_force or step_force.get(child, False)):
+                                self.logger.warning(
+                                    f"⚡ Forcing run of '{child}' "
+                                    f"(parents: {_format_parent_statuses(child)})."
+                                )
+                            queue.append(child)
+
+                # 큐에 쌓인 작업 제출
+                while queue:
+                    nxt = queue.popleft()
+                    if nxt in completed or nxt in (futures.values()):
+                        continue
+                    futures[executor.submit(_run_step_wrapper, name_to_step[nxt])] = nxt
+
+                # 기존 동작 유지: force 전혀 없고 실패 발생 시 중단
+                if not force_any and any(v == "failed" for v in status.values()):
+                    self.logger.error("🛑 Aborting DAG execution due to failure (force mode is off).")
+                    break
 
         self._print_summary(success_steps)
 
@@ -170,8 +275,9 @@ class PipelineBuilder:
             self.logger.info("🎉 All steps completed successfully.")
 
     def _print_dag_structure(self):
+        """기존 DAG 출력 로직 유지, selected_step가 있으면 그 조상들만 표시"""
         self.logger.info("📊 DAG Structure:")
-        graph, _ = self._build_dependency_graph()
+        graph, _, _ = self._build_dependency_graph()
         visited = set()
 
         def dfs(node, depth=0):
@@ -211,9 +317,10 @@ class PipelineBuilder:
                     dfs_limited(child, depth + 1)
 
             dfs_limited(self.selected_step)
-
         else:
-            roots = [step for step in self.get_step_names() if step not in {n for deps in graph.values() for n in deps}]
+            # 루트부터 출력
+            all_children = {n for deps in graph.values() for n in deps}
+            roots = [step for step in self.get_step_names() if step not in all_children]
             for root in roots:
                 dfs(root)
 
@@ -222,7 +329,7 @@ class PipelineBuilder:
         import pydot
         from networkx.drawing.nx_pydot import to_pydot
 
-        graph, _ = self._build_dependency_graph()
+        graph, _, _ = self._build_dependency_graph()
         G = nx.DiGraph()
 
         for step in self.get_step_names():
@@ -235,21 +342,23 @@ class PipelineBuilder:
         skipped_set = set(self.skipped_steps)
         success_set = set(self.get_step_names()) - failed_set - skipped_set
 
-        in_degree = defaultdict(int)
+        # 레벨 계산
+        from collections import defaultdict as _dd
+        in_degree = _dd(int)
         for u, v in G.edges():
             in_degree[v] += 1
 
-        queue = deque([node for node in G.nodes() if in_degree[node] == 0])
-        level = {node: 0 for node in queue}
+        q = deque([node for node in G.nodes() if in_degree[node] == 0])
+        level = {node: 0 for node in q}
 
-        while queue:
-            current = queue.popleft()
+        while q:
+            current = q.popleft()
             for neighbor in G.successors(current):
                 if neighbor not in level:
                     level[neighbor] = level[current] + 1
                 else:
                     level[neighbor] = max(level[neighbor], level[current] + 1)
-                queue.append(neighbor)
+                q.append(neighbor)
 
         pydot_graph = to_pydot(G)
         pydot_graph.set("rankdir", "LR")
@@ -270,7 +379,7 @@ class PipelineBuilder:
                 node.set_style("filled")
                 node.set_fillcolor("lightgray")
 
-        level_dict = defaultdict(list)
+        level_dict = _dd(list)
         for node, lvl in level.items():
             level_dict[lvl].append(node)
 
