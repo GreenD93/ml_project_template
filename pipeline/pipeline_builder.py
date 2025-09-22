@@ -275,54 +275,49 @@ class PipelineBuilder:
             self.logger.info("🎉 All steps completed successfully.")
 
     def _print_dag_structure(self):
-        """기존 DAG 출력 로직 유지, selected_step가 있으면 그 조상들만 표시"""
+        """DAG를 레벨(계층) 단위로 묶어 출력.
+        예)
+        - preprocess, train
+        - inference
+        """
         self.logger.info("📊 DAG Structure:")
-        graph, _, _ = self._build_dependency_graph()
-        visited = set()
+        graph, in_degree, _ = self._build_dependency_graph()
 
-        def dfs(node, depth=0):
-            indent = "  " * depth
-            self.logger.info(f"{indent}- {node}")
-            visited.add(node)
-            for child in graph.get(node, []):
-                if child not in visited:
-                    dfs(child, depth + 1)
+        from collections import defaultdict, deque
 
-        if self.selected_step:
-            reverse_graph = defaultdict(list)
-            for parent, children in graph.items():
-                for child in children:
-                    reverse_graph[child].append(parent)
+        # 1) 레벨 계산 (Kahn + longest-path 레벨링)
+        level = {}
+        q = deque([n for n, deg in in_degree.items() if deg == 0])
+        for n in q:
+            level[n] = 0
 
-            def get_ancestors(step):
-                ancestors = set()
-                stack = [step]
-                while stack:
-                    current = stack.pop()
-                    for parent in reverse_graph.get(current, []):
-                        if parent not in ancestors:
-                            ancestors.add(parent)
-                            stack.append(parent)
-                return ancestors
+        # in_degree를 파괴적으로 쓰지 않으려면 복사 사용
+        indeg = dict(in_degree)
 
-            focus_steps = get_ancestors(self.selected_step) | {self.selected_step}
+        while q:
+            u = q.popleft()
+            for v in graph.get(u, []):
+                # 부모 레벨 + 1 로 후보 갱신 (여러 부모가 있으면 최대 레벨 사용)
+                level[v] = max(level.get(v, 0), level[u] + 1)
+                indeg[v] -= 1
+                if indeg[v] == 0:
+                    q.append(v)
 
-            def dfs_limited(node, depth=0):
-                if node not in focus_steps or node in visited:
-                    return
-                indent = "  " * depth
-                self.logger.info(f"{indent}- {node}")
-                visited.add(node)
-                for child in graph.get(node, []):
-                    dfs_limited(child, depth + 1)
+        if not level:
+            self.logger.info("- (empty)")
+            return
 
-            dfs_limited(self.selected_step)
-        else:
-            # 루트부터 출력
-            all_children = {n for deps in graph.values() for n in deps}
-            roots = [step for step in self.get_step_names() if step not in all_children]
-            for root in roots:
-                dfs(root)
+        # 2) 레벨별 그룹핑 및 정렬
+        by_level = defaultdict(list)
+        for n, lv in level.items():
+            by_level[lv].append(n)
+        max_lv = max(by_level.keys())
+
+        for lv in range(0, max_lv + 1):
+            names = ", ".join(sorted(by_level[lv]))
+            indent = "  " * lv
+            self.logger.info(f"{indent}- {names}")
+
 
     def visualize_dag(self, output_file="dag_parallel.png"):
         import networkx as nx
