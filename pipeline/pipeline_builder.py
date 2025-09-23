@@ -275,48 +275,84 @@ class PipelineBuilder:
             self.logger.info("🎉 All steps completed successfully.")
 
     def _print_dag_structure(self):
-        """DAG를 레벨(계층) 단위로 묶어 출력.
+        """DAG를 컴포넌트별 + 레벨(계층) 단위로 출력.
         예)
+        - ddl
         - preprocess, train
         - inference
         """
         self.logger.info("📊 DAG Structure:")
-        graph, in_degree, _ = self._build_dependency_graph()
-
         from collections import defaultdict, deque
 
-        # 1) 레벨 계산 (Kahn + longest-path 레벨링)
-        level = {}
-        q = deque([n for n, deg in in_degree.items() if deg == 0])
-        for n in q:
-            level[n] = 0
+        graph, in_degree, _ = self._build_dependency_graph()
 
-        # in_degree를 파괴적으로 쓰지 않으려면 복사 사용
-        indeg = dict(in_degree)
-
-        while q:
-            u = q.popleft()
+        # --- 0) 무방향(weak) 컴포넌트 나누기 ---
+        undirected = defaultdict(set)
+        nodes = set(in_degree.keys()) | set(graph.keys())
+        for u in nodes:
             for v in graph.get(u, []):
-                # 부모 레벨 + 1 로 후보 갱신 (여러 부모가 있으면 최대 레벨 사용)
-                level[v] = max(level.get(v, 0), level[u] + 1)
-                indeg[v] -= 1
-                if indeg[v] == 0:
-                    q.append(v)
+                undirected[u].add(v)
+                undirected[v].add(u)
+        # 고립 노드 보정
+        for n in nodes:
+            undirected[n]  # ensure key exists
 
-        if not level:
-            self.logger.info("- (empty)")
-            return
+        visited = set()
+        components = []
+        for n in sorted(nodes):  # 정렬해 출력 순서 안정화 (알파벳 기준)
+            if n in visited:
+                continue
+            # BFS/DFS로 컴포넌트 수집
+            comp = set()
+            q = deque([n])
+            visited.add(n)
+            while q:
+                cur = q.popleft()
+                comp.add(cur)
+                for nb in undirected[cur]:
+                    if nb not in visited:
+                        visited.add(nb)
+                        q.append(nb)
+            components.append(sorted(comp))  # 컴포넌트 내부도 정렬
 
-        # 2) 레벨별 그룹핑 및 정렬
-        by_level = defaultdict(list)
-        for n, lv in level.items():
-            by_level[lv].append(n)
-        max_lv = max(by_level.keys())
+        # --- 1) 각 컴포넌트별로 레벨 계산(Kahn + longest path) 후 출력 ---
+        for comp in components:
+            # 부분 in_degree/graph 재계산 (컴포넌트 한정)
+            sub_graph = defaultdict(list)
+            sub_in = {n: 0 for n in comp}
+            for u in comp:
+                for v in graph.get(u, []):
+                    if v in sub_in:
+                        sub_graph[u].append(v)
+                        sub_in[v] += 1
 
-        for lv in range(0, max_lv + 1):
-            names = ", ".join(sorted(by_level[lv]))
-            indent = "  " * lv
-            self.logger.info(f"{indent}- {names}")
+            # 레벨 계산
+            level = {}
+            q = deque([n for n, d in sub_in.items() if d == 0])
+            for n in q:
+                level[n] = 0
+            indeg = dict(sub_in)
+
+            while q:
+                u = q.popleft()
+                for v in sub_graph.get(u, []):
+                    level[v] = max(level.get(v, 0), level[u] + 1)
+                    indeg[v] -= 1
+                    if indeg[v] == 0:
+                        q.append(v)
+
+            if not level:  # 이론상 없을 수 없지만 방어
+                self.logger.info("- (empty)")
+                continue
+
+            by_level = defaultdict(list)
+            for n, lv in level.items():
+                by_level[lv].append(n)
+
+            for lv in range(0, max(by_level.keys()) + 1):
+                names = ", ".join(sorted(by_level[lv]))
+                indent = "  " * lv
+                self.logger.info(f"{indent}- {names}")
 
 
     def visualize_dag(self, output_file="dag_parallel.png"):
